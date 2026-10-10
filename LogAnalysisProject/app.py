@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
 from pathlib import Path
 
 
@@ -40,9 +39,7 @@ def load_data():
     data["Level"] = data["Level"].fillna("UNKNOWN").astype(str)
     data["Component"] = data["Component"].fillna("Unknown").astype(str)
     data["EventId"] = data["EventId"].fillna("Unknown").astype(str)
-    data["EventTemplate"] = (
-        data["EventTemplate"].fillna("Unknown").astype(str)
-    )
+    data["EventTemplate"] = data["EventTemplate"].fillna("Unknown").astype(str)
     data["Content"] = data["Content"].fillna("").astype(str)
 
     return data
@@ -135,11 +132,7 @@ st.markdown(
 
     .hero {{
         padding: 1.5rem 1.7rem;
-        background: linear-gradient(
-            120deg,
-            {panel},
-            {panel_alt}
-        );
+        background: linear-gradient(120deg, {panel}, {panel_alt});
         border: 1px solid var(--border);
         border-radius: 20px;
         margin-bottom: 1.5rem;
@@ -217,28 +210,6 @@ st.markdown(
         margin-top: 0.3rem;
     }}
 
-    .section-label {{
-        color: var(--muted);
-        font-size: 0.78rem;
-        font-weight: 800;
-        letter-spacing: 1.5px;
-        text-transform: uppercase;
-        margin-bottom: 0.4rem;
-    }}
-
-    .panel-heading {{
-        font-size: 1.15rem;
-        font-weight: 800;
-        color: var(--text);
-        margin-bottom: 0.2rem;
-    }}
-
-    .panel-caption {{
-        color: var(--muted);
-        font-size: 0.84rem;
-        margin-bottom: 1rem;
-    }}
-
     div[data-testid="stPlotlyChart"] {{
         background: var(--panel);
         border: 1px solid var(--border);
@@ -282,7 +253,7 @@ st.markdown(
 
 
 # =========================================================
-# HEADER AND SIGNATURE THEME SWITCH
+# HEADER AND THEME SWITCH
 # =========================================================
 
 header_col, theme_col = st.columns([5, 1])
@@ -306,9 +277,7 @@ with theme_col:
     )
 
 
-# Recalculate theme variables after the toggle interaction.
-# Streamlit reruns the script whenever the toggle changes.
-
+# Recalculate theme values after the toggle.
 if st.session_state.dark_mode:
     bg = "#0B1020"
     panel = "#121A2B"
@@ -332,13 +301,12 @@ else:
 
 
 # =========================================================
-# FILTERS
+# SIDEBAR FILTERS
 # =========================================================
 
 with st.sidebar:
     st.markdown("## 🎛️ Control Center")
     st.caption("Filter and explore your Hadoop logs.")
-
     st.divider()
 
     selected_levels = st.multiselect(
@@ -362,7 +330,6 @@ with st.sidebar:
     )
 
     st.divider()
-
     st.markdown("### Dataset")
     st.write(f"📄 {len(df):,} total records")
     st.write(f"🧩 {df['Component'].nunique()} components")
@@ -405,15 +372,8 @@ st.markdown(
 # =========================================================
 
 total = len(filtered_df)
-
-info_count = int(
-    (filtered_df["Level"].str.upper() == "INFO").sum()
-)
-
-warn_count = int(
-    (filtered_df["Level"].str.upper() == "WARN").sum()
-)
-
+info_count = int((filtered_df["Level"].str.upper() == "INFO").sum())
+warn_count = int((filtered_df["Level"].str.upper() == "WARN").sum())
 component_count = filtered_df["Component"].nunique()
 
 metrics = [
@@ -469,7 +429,7 @@ overview_tab, events_tab, records_tab = st.tabs(
 
 
 # =========================================================
-# CHART HELPERS
+# CHART HELPER
 # =========================================================
 
 def apply_chart_theme(fig, height=350):
@@ -479,17 +439,9 @@ def apply_chart_theme(fig, height=350):
         margin=dict(l=20, r=20, t=35, b=25),
         paper_bgcolor=panel,
         plot_bgcolor=panel,
-        font=dict(
-            family="Arial",
-            color=text,
-            size=12
-        ),
-        legend=dict(
-            bgcolor="rgba(0,0,0,0)"
-        ),
-        hoverlabel=dict(
-            font_size=13
-        )
+        font=dict(family="Arial", color=text, size=12),
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+        hoverlabel=dict(font_size=13)
     )
 
     fig.update_xaxes(
@@ -519,6 +471,7 @@ with overview_tab:
 
     chart_left, chart_right = st.columns(2)
 
+    # Severity distribution
     with chart_left:
         st.markdown("#### Severity Distribution")
 
@@ -560,6 +513,7 @@ with overview_tab:
         else:
             st.info("No records match the selected filters.")
 
+    # Component activity
     with chart_right:
         st.markdown("#### Component Activity")
 
@@ -582,15 +536,204 @@ with overview_tab:
                 hover_data={"Count": True}
             )
 
-            fig.update_layout(
-                coloraxis_showscale=False
-            )
-
+            fig.update_layout(coloraxis_showscale=False)
             apply_chart_theme(fig, height=390)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No components match the selected filters.")
 
+    # =====================================================
+    # 3D LOG ACTIVITY — RECTANGULAR 3D BARS
+    # =====================================================
+
+    st.markdown("### 3D Log Activity")
+    st.caption(
+        "Bar height shows the number of log entries. Hover over a bar "
+        "for its component, event ID, and warning count."
+    )
+
+    if not filtered_df.empty:
+        # Keep the chart readable by plotting the 18 most frequent
+        # component/event combinations.
+        bar_data = (
+            filtered_df.groupby(
+                ["Component", "EventId", "EventTemplate"],
+                dropna=False
+            )
+            .agg(
+                Total_Events=("LineId", "count"),
+                Warning_Events=(
+                    "Level",
+                    lambda values: values.str.upper().eq("WARN").sum()
+                )
+            )
+            .reset_index()
+            .sort_values("Total_Events", ascending=False)
+            .head(18)
+            .reset_index(drop=True)
+        )
+
+        bar_data["Warning_Rate"] = (
+            bar_data["Warning_Events"]
+            .div(bar_data["Total_Events"])
+            .mul(100)
+        )
+
+        component_names = list(bar_data["Component"].drop_duplicates())
+        event_names = list(bar_data["EventId"].drop_duplicates())
+
+        component_positions = {
+            name: index for index, name in enumerate(component_names)
+        }
+        event_positions = {
+            name: index for index, name in enumerate(event_names)
+        }
+
+        bar_data["X"] = bar_data["Component"].map(component_positions)
+        bar_data["Y"] = bar_data["EventId"].map(event_positions)
+
+        # Construct cuboids as Mesh3d surfaces. Each bar has a real
+        # width/depth and rises from Z=0 to its log count.
+        fig_3d = go.Figure()
+        bar_width = 0.32
+        bar_depth = 0.32
+
+        color_scale = px.colors.sample_colorscale(
+            "Viridis",
+            [
+                float(value) / 100
+                for value in bar_data["Warning_Rate"].clip(0, 100)
+            ]
+        )
+
+        for index, row in bar_data.iterrows():
+            x0 = float(row["X"]) - bar_width / 2
+            x1 = float(row["X"]) + bar_width / 2
+            y0 = float(row["Y"]) - bar_depth / 2
+            y1 = float(row["Y"]) + bar_depth / 2
+            z0 = 0.0
+            z1 = float(row["Total_Events"])
+
+            # Eight vertices of the rectangular prism.
+            xs = [x0, x1, x1, x0, x0, x1, x1, x0]
+            ys = [y0, y0, y1, y1, y0, y0, y1, y1]
+            zs = [z0, z0, z0, z0, z1, z1, z1, z1]
+
+            # Triangles forming the six faces of the cuboid.
+            i_faces = [0, 0, 4, 4, 0, 0, 1, 1, 2, 2, 3, 3]
+            j_faces = [1, 2, 5, 6, 1, 5, 2, 6, 3, 7, 0, 4]
+            k_faces = [2, 3, 6, 7, 5, 4, 6, 5, 7, 6, 4, 7]
+
+            hover_text = (
+                f"Component: {row['Component']}<br>"
+                f"Event ID: {row['EventId']}<br>"
+                f"Log entries: {int(row['Total_Events'])}<br>"
+                f"Warnings: {int(row['Warning_Events'])}<br>"
+                f"Warning rate: {row['Warning_Rate']:.2f}%<br>"
+                f"Template: {row['EventTemplate']}"
+            )
+
+            fig_3d.add_trace(
+                go.Mesh3d(
+                    x=xs,
+                    y=ys,
+                    z=zs,
+                    i=i_faces,
+                    j=j_faces,
+                    k=k_faces,
+                    color=color_scale[index],
+                    opacity=0.95,
+                    flatshading=True,
+                    hovertext=[hover_text] * 8,
+                    hoverinfo="text",
+                    showscale=False,
+                    name=str(row["EventId"]),
+                    showlegend=False
+                )
+            )
+
+        # Add a single invisible/marker trace to show the colour scale
+        # meaning without adding visible dots to the 3D bar chart.
+        fig_3d.add_trace(
+            go.Scatter3d(
+                x=[None, None],
+                y=[None, None],
+                z=[None, None],
+                mode="markers",
+                marker=dict(
+                    size=0,
+                    color=[0, 100],
+                    cmin=0,
+                    cmax=100,
+                    colorscale="Viridis",
+                    colorbar=dict(
+                        title="Warning %",
+                        thickness=12,
+                        len=0.65
+                    )
+                ),
+                hoverinfo="skip",
+                showlegend=False
+            )
+        )
+
+        max_count = max(1, int(bar_data["Total_Events"].max()))
+
+        fig_3d.update_layout(
+            template=template,
+            height=590,
+            paper_bgcolor=panel,
+            font=dict(color=text, family="Arial", size=10),
+            margin=dict(l=0, r=0, t=15, b=0),
+            showlegend=False,
+            scene=dict(
+                bgcolor=panel,
+                aspectmode="auto",
+                xaxis=dict(
+                    title="Component",
+                    tickmode="array",
+                    tickvals=list(range(len(component_names))),
+                    ticktext=[
+                        name if len(name) <= 16 else name[:13] + "..."
+                        for name in component_names
+                    ],
+                    backgroundcolor=panel,
+                    gridcolor=grid,
+                    zerolinecolor=grid
+                ),
+                yaxis=dict(
+                    title="Event ID",
+                    tickmode="array",
+                    tickvals=list(range(len(event_names))),
+                    ticktext=event_names,
+                    backgroundcolor=panel,
+                    gridcolor=grid,
+                    zerolinecolor=grid
+                ),
+                zaxis=dict(
+                    title="Log Entries",
+                    range=[0, max_count * 1.1],
+                    backgroundcolor=panel,
+                    gridcolor=grid,
+                    zerolinecolor=grid
+                ),
+                camera=dict(eye=dict(x=1.65, y=1.65, z=1.25))
+            )
+        )
+
+        st.plotly_chart(
+            fig_3d,
+            use_container_width=True,
+            config={
+                "scrollZoom": True,
+                "displaylogo": False
+            }
+        )
+
+    else:
+        st.info("No component data matches the current filters.")
+
+    # Frequently occurring events
     st.markdown("### Frequently Occurring Events")
 
     event_counts = (
@@ -613,10 +756,7 @@ with overview_tab:
             hover_data={"Count": True}
         )
 
-        fig.update_layout(
-            coloraxis_showscale=False
-        )
-
+        fig.update_layout(coloraxis_showscale=False)
         apply_chart_theme(fig, height=450)
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -741,10 +881,7 @@ with records_tab:
     searchable_df = filtered_df.copy()
 
     if search_query.strip():
-        mask = pd.Series(
-            False,
-            index=searchable_df.index
-        )
+        mask = pd.Series(False, index=searchable_df.index)
 
         for column in search_columns:
             mask |= searchable_df[column].astype(str).str.contains(
@@ -756,9 +893,7 @@ with records_tab:
 
         searchable_df = searchable_df[mask]
 
-    st.write(
-        f"**{len(searchable_df):,} records found**"
-    )
+    st.write(f"**{len(searchable_df):,} records found**")
 
     st.dataframe(
         searchable_df,
@@ -767,9 +902,7 @@ with records_tab:
         height=480
     )
 
-    download_data = searchable_df.to_csv(
-        index=False
-    ).encode("utf-8")
+    download_data = searchable_df.to_csv(index=False).encode("utf-8")
 
     st.download_button(
         "⬇️ Download Filtered Records",
