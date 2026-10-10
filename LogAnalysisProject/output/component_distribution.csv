@@ -1,0 +1,7 @@
+Component,Count
+dfs.FSNamesystem,659
+dfs.DataNode$PacketResponder,603
+dfs.DataNode$DataXceiver,454
+dfs.FSDataset,263
+dfs.DataBlockScanner,20
+dfs.DataNode,1
