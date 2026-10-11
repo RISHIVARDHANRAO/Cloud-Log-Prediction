@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
 
 
 # =========================================================
@@ -16,11 +15,14 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_PATH = BASE_DIR / "data" / "Hdfs_structured.csv"
+# GitHub-hosted CSV dataset
+CLOUD_DATA_URL = (
+    "https://raw.githubusercontent.com/"
+    "RISHIVARDHANRAO/Cloud-Log-Prediction/"
+    "refs/heads/main/LogAnalysisProject/data/Hdfs_structured.csv"
+)
 
-# Replace this with your actual Power BI report URL.
-# Keep the report access restricted to authorized viewers.
+# Existing Power BI report URL
 POWER_BI_URL = "https://app.powerbi.com/groups/me/reports/9febc1ef-321e-4016-bd76-23fd0cf9ceee/22408741f72de1bc088f?experience=power-bi"
 
 
@@ -33,12 +35,12 @@ if "dark_mode" not in st.session_state:
 
 
 # =========================================================
-# LOAD DATA
+# LOAD DATA FROM GITHUB
 # =========================================================
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_data():
-    data = pd.read_csv(DATA_PATH)
+    data = pd.read_csv(CLOUD_DATA_URL)
 
     data["Level"] = data["Level"].fillna("UNKNOWN").astype(str)
     data["Component"] = data["Component"].fillna("Unknown").astype(str)
@@ -49,11 +51,16 @@ def load_data():
     return data
 
 
-if not DATA_PATH.exists():
-    st.error("Dataset not found. Check data/Hdfs_structured.csv.")
+try:
+    df = load_data()
+except Exception as e:
+    st.error("Unable to load the dataset from GitHub.")
+    st.info(
+        "Check that the repository is public, the dataset URL is correct, "
+        "and your internet connection is working."
+    )
+    st.caption(f"Technical details: {e}")
     st.stop()
-
-df = load_data()
 
 
 # =========================================================
